@@ -45,6 +45,124 @@ for file in csv_files:
 
         df = pd.read_csv(file)
 
+        # ==========================================
+        # DAY 2 CLEANING
+        # ==========================================
+
+        # NAV HISTORY
+
+        if file.name == "02_nav_history.csv":
+
+            print("\nCleaning NAV History...")
+
+            df["date"] = pd.to_datetime(
+                df["date"],
+                errors="coerce"
+            )
+
+            df = df.sort_values(
+                ["amfi_code", "date"]
+            )
+
+            df = df.drop_duplicates()
+
+            df = df[
+                df["nav"] > 0
+            ]
+
+            df["nav"] = (
+                df.groupby("amfi_code")["nav"]
+                .ffill()
+            )
+
+        # INVESTOR TRANSACTIONS
+
+        if file.name == "08_investor_transactions.csv":
+
+            print("\nCleaning Investor Transactions...")
+
+            df["transaction_date"] = pd.to_datetime(
+                df["transaction_date"],
+                errors="coerce"
+            )
+
+            valid_types = [
+                "Sip",
+                "Lumpsum",
+                "Redemption"
+            ]
+
+            df["transaction_type"] = (
+                df["transaction_type"]
+                .astype(str)
+                .str.strip()
+                .str.title()
+            )
+
+            df = df[
+                df["transaction_type"]
+                .isin(valid_types)
+            ]
+
+            df = df[
+                df["amount_inr"] > 0
+            ]
+
+            valid_kyc = [
+                "Verified",
+                "Pending"
+            ]
+
+            invalid_kyc = df[
+                ~df["kyc_status"]
+                .isin(valid_kyc)
+            ]
+
+            print(
+                f"Invalid KYC Records: {len(invalid_kyc)}"
+            )
+
+        # SCHEME PERFORMANCE
+
+        if file.name == "07_scheme_performance.csv":
+
+            print("\nCleaning Scheme Performance...")
+
+            return_cols = [
+                "return_1yr_pct",
+                "return_3yr_pct",
+                "return_5yr_pct"
+            ]
+
+            for col in return_cols:
+
+                if col in df.columns:
+
+                    df[col] = pd.to_numeric(
+                        df[col],
+                        errors="coerce"
+                    )
+
+            if "expense_ratio_pct" in df.columns:
+
+                anomalies = df[
+                    (
+                        df["expense_ratio_pct"] < 0.1
+                    )
+                    |
+                    (
+                        df["expense_ratio_pct"] > 2.5
+                    )
+                ]
+
+                print(
+                    f"Expense Ratio Anomalies: {len(anomalies)}"
+                )
+
+        # -----------------------------
+        # BASIC INFO
+        # -----------------------------
+
         print("\nShape:")
         print(df.shape)
 
@@ -87,7 +205,6 @@ for file in csv_files:
                     f"\nConverting {col} to datetime..."
                 )
 
-                # MFAPI NAV files use DD-MM-YYYY format
                 if (
                     "bluechip_nav" in file.name.lower()
                     or "largecap_nav" in file.name.lower()
@@ -107,7 +224,11 @@ for file in csv_files:
                         errors="coerce"
                     )
 
-                invalid_dates = df[col].isnull().sum()
+                invalid_dates = (
+                    df[col]
+                    .isnull()
+                    .sum()
+                )
 
                 if invalid_dates > 0:
 
@@ -125,7 +246,9 @@ for file in csv_files:
 
         after = len(df)
 
-        duplicates_removed = before - after
+        duplicates_removed = (
+            before - after
+        )
 
         print(
             f"\nDuplicates Removed: {duplicates_removed}"
